@@ -8,8 +8,7 @@ use bcder::encode::PrimitiveContent;
 use bytes::Bytes;
 use crate::oid;
 use crate::crypto::{
-    DigestAlgorithm, KeyIdentifier, RpkiSignature, RpkiSignatureAlgorithm,
-    SignatureAlgorithm, Signer, SigningError, PublicKey
+    DigestAlgorithm, KeyIdentifier, PublicKey, PublicKeyFormat, RpkiSignature, RpkiSignatureAlgorithm, SignatureAlgorithm, Signer, SigningError
 };
 use crate::repository::error::{
     InspectionError, ValidationError, VerificationError
@@ -482,8 +481,12 @@ impl SignedMessageCrl {
         signer: &S,
     ) -> Result<Self, SigningError<S::Error>> {
         let issuing_pub_key = signer.get_key_info(issuing_key_id)?;
-        
-        let signature = RpkiSignatureAlgorithm::default();
+
+        let signature_algorithm = match issuing_pub_key.algorithm() {
+            PublicKeyFormat::Rsa => Ok(RpkiSignatureAlgorithm::default()),
+            PublicKeyFormat::MlDsa65 => Ok(RpkiSignatureAlgorithm::MlDsa65),
+            PublicKeyFormat::EcdsaP256 => Err(SigningError::IncompatibleKey),
+        }?;
         let issuer = Name::from_pub_key(&issuing_pub_key);
         
         let this_update = validity.not_before();
@@ -502,7 +505,7 @@ impl SignedMessageCrl {
         ));
 
         let tbs = SignedMessageTbsCrl {
-            signature,
+            signature: signature_algorithm,
             issuer,
             this_update,
             next_update,
@@ -512,7 +515,10 @@ impl SignedMessageCrl {
         };
 
         let data = Captured::from_values(Mode::Der, tbs.encode_ref());
-        let signature = signer.sign(issuing_key_id, tbs.signature, &data)?;
+        let signature = signer.sign(issuing_key_id, &data)?;
+        if *signature.algorithm() != signature_algorithm {
+            return Err(SigningError::IncompatibleKey)
+        }
         let signed_data = SignedData::new(data, signature);
 
         Ok(SignedMessageCrl {
@@ -532,8 +538,6 @@ impl SignedMessageCrl {
 #[derive(Clone, Debug)]
 struct SignedMessageTbsCrl {
     /// The algorithm used for signing the certificate.
-    /// 
-    /// This MUST be RSA.
     signature: RpkiSignatureAlgorithm,
     
     /// The name of the issuer.

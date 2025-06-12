@@ -448,7 +448,7 @@ mod signer_test {
     use std::str::FromStr;
     use crate::uri;
     use crate::repository::cert::{KeyUsage, Overclaim, TbsCert};
-    use crate::crypto::PublicKeyFormat;
+    use crate::crypto::{PublicKeyFormat, RpkiSignatureAlgorithm};
     use crate::crypto::softsigner::OpenSslSigner;
     use crate::repository::resources::Prefix;
     use crate::repository::tal::TalInfo;
@@ -490,6 +490,7 @@ mod signer_test {
                 pubkey,
                 KeyUsage::Ca,
                 Overclaim::Refuse,
+                RpkiSignatureAlgorithm::default()
             );
             cert.set_basic_ca(Some(true));
             cert.set_ca_repository(Some(repo_uri));

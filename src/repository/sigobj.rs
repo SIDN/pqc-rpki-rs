@@ -11,8 +11,7 @@ use bcder::string::OctetStringSource;
 use bytes::Bytes;
 use crate::{oid, uri};
 use crate::crypto::{
-    Digest, DigestAlgorithm, KeyIdentifier, RpkiSignature,
-    RpkiSignatureAlgorithm, Signer, SigningError
+    Digest, DigestAlgorithm, KeyIdentifier, PublicKeyFormat, RpkiSignature, RpkiSignatureAlgorithm, Signer, SigningError
 };
 use super::cert::{Cert, KeyUsage, Overclaim, ResourceCert, TbsCert};
 use super::error::{
@@ -920,6 +919,11 @@ impl SignedObjectBuilder {
         issuer_key: &S::KeyId,
     ) -> Result<SignedObject, SigningError<S::Error>> {
         let issuer_pub = signer.get_key_info(issuer_key)?;
+        let cert_algorithm = match issuer_pub.algorithm() {
+            PublicKeyFormat::Rsa => Ok(RpkiSignatureAlgorithm::default()),
+            PublicKeyFormat::MlDsa65 => Ok(RpkiSignatureAlgorithm::MlDsa65),
+            PublicKeyFormat::EcdsaP256 => Err(SigningError::IncompatibleKey),
+        }?;
 
         // Produce signed attributes.
         let message_digest = self.digest_algorithm.digest(&content).into();
@@ -947,6 +951,7 @@ impl SignedObjectBuilder {
             key_info,
             KeyUsage::Ee,
             Overclaim::Refuse,
+            cert_algorithm,
         );
         cert.set_authority_key_identifier(Some(issuer_pub.key_identifier()));
         cert.set_crl_uri(Some(self.crl_uri));
@@ -1092,7 +1097,7 @@ mod signer_test {
         let mut cert = TbsCert::new(
             12u64.into(), pubkey.to_subject_name(),
             Validity::from_secs(86400), None, pubkey, KeyUsage::Ca,
-            Overclaim::Trim
+            Overclaim::Trim, RpkiSignatureAlgorithm::default()
         );
         cert.set_basic_ca(Some(true));
         cert.set_ca_repository(Some(uri.clone()));

@@ -258,9 +258,13 @@ impl<C> TbsCertList<C> {
         C: IntoIterator<Item=CrlEntry>,
         <C as IntoIterator>::IntoIter: Clone
     {
+        let signature_algorithm = self.signature;
         let tbs: TbsCertList<RevokedCertificates> = self.into();
         let data = Captured::from_values(Mode::Der, tbs.encode_ref());
-        let signature = signer.sign(key, tbs.signature, &data)?;
+        let signature = signer.sign(key, &data)?;
+        if *signature.algorithm() != signature_algorithm {
+            return Err(SigningError::IncompatibleKey)
+        }
         Ok(Crl {
             signed_data: SignedData::new(data, signature),
             tbs,

@@ -573,7 +573,7 @@ mod test {
 mod signer_test {
     use std::str::FromStr;
     use crate::repository::cert::{KeyUsage, Overclaim, TbsCert};
-    use crate::crypto::PublicKeyFormat;
+    use crate::crypto::{PublicKeyFormat, RpkiSignatureAlgorithm};
     use crate::crypto::softsigner::OpenSslSigner;
     use crate::repository::resources::{Asn, Prefix};
     use crate::repository::tal::TalInfo;
@@ -589,7 +589,7 @@ mod signer_test {
         let mut cert = TbsCert::new(
             12u64.into(), pubkey.to_subject_name(),
             Validity::from_secs(86400), None, pubkey, KeyUsage::Ca,
-            Overclaim::Trim
+            Overclaim::Trim, RpkiSignatureAlgorithm::default()
         );
         cert.set_basic_ca(Some(true));
         cert.set_ca_repository(Some(uri.clone()));

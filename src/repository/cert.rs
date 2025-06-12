@@ -1196,10 +1196,11 @@ impl TbsCert {
         subject_public_key_info: PublicKey,
         key_usage: KeyUsage,
         overclaim: Overclaim,
+        signature_algorithm: RpkiSignatureAlgorithm,
     ) -> Self {
         Self {
             serial_number,
-            signature: RpkiSignatureAlgorithm::default(),
+            signature: signature_algorithm,
             issuer,
             validity,
             subject: {
@@ -1233,7 +1234,10 @@ impl TbsCert {
         key: &S::KeyId,
     ) -> Result<Cert, SigningError<S::Error>> {
         let data = Captured::from_values(Mode::Der, self.encode_ref());
-        let signature = signer.sign(key, self.signature, &data)?;
+        let signature = signer.sign(key, &data)?;
+        if *signature.algorithm() != self.signature {
+            return Err(SigningError::IncompatibleKey)
+        }
         Ok(Cert {
             signed_data: SignedData::new(data, signature),
             tbs: self
@@ -2797,7 +2801,7 @@ mod signer_test {
         let mut cert = TbsCert::new(
             12u64.into(), pubkey.to_subject_name(),
             Validity::from_secs(86400), None, pubkey, KeyUsage::Ca,
-            Overclaim::Trim
+            Overclaim::Trim, RpkiSignatureAlgorithm::default()
         );
         cert.set_basic_ca(Some(true));
         cert.set_ca_repository(Some(uri.clone()));

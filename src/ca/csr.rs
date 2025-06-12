@@ -647,7 +647,7 @@ mod signer_test {
         let mut cert = TbsCert::new(
             12u64.into(), ca_pubkey.to_subject_name(),
             Validity::from_secs(86400), None, ca_pubkey, KeyUsage::Ca,
-            Overclaim::Trim
+            Overclaim::Trim, RpkiSignatureAlgorithm::default()
         );
         cert.set_basic_ca(Some(true));
         cert.set_ca_repository(Some(uri.clone()));
@@ -667,7 +667,8 @@ mod signer_test {
             None,
             csr.public_key().clone(),
             KeyUsage::Ee,
-            Overclaim::Refuse
+            Overclaim::Refuse,
+            RpkiSignatureAlgorithm::default()
         );
         router_cert.set_authority_key_identifier(
             Some(ca_cert.subject_key_identifier())

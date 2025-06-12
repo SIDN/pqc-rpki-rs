@@ -1324,8 +1324,7 @@ impl RtaBuilder {
 
         // Sign those attributes
         let signature = signer.sign(
-            key, RpkiSignatureAlgorithm::default(),
-            &signed_attrs.encode_verify()
+            key, &signed_attrs.encode_verify()
         )?;
 
         self.signer_infos.push(SignerInfo {

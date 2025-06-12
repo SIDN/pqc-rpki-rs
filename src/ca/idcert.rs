@@ -10,8 +10,7 @@ use std::ops;
 
 use crate::oid;
 use crate::crypto::{
-    KeyIdentifier, PublicKey, RpkiSignatureAlgorithm, SignatureAlgorithm,
-    SignatureVerificationError, Signer, SigningError,
+    KeyIdentifier, PublicKey, PublicKeyFormat, RpkiSignatureAlgorithm, SignatureAlgorithm, SignatureVerificationError, Signer, SigningError
 };
 use crate::repository::cert::TbsCert;
 use crate::repository::error::{
@@ -351,6 +350,9 @@ impl<'de> serde::Deserialize<'de> for IdCert {
 /// The data of an identity certificate.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct TbsIdCert {
+    /// The algorithm used for signing the certificate.
+    signature: RpkiSignatureAlgorithm,
+
     /// The serial number.
     serial_number: Serial,
 
@@ -462,7 +464,7 @@ impl TbsIdCert {
             cons.take_constructed_if(Tag::CTX_0, |c| c.skip_u8_if(2))?;
 
             let serial_number = Serial::take_from(cons)?;
-            let _sig = RpkiSignatureAlgorithm::x509_take_from(cons)?;
+            let signature = RpkiSignatureAlgorithm::x509_take_from(cons)?;
             let issuer = Name::take_from(cons)?;
             let validity = Validity::take_from(cons)?;
             let subject = Name::take_from(cons)?;
@@ -516,6 +518,7 @@ impl TbsIdCert {
             })?;
 
             Ok(TbsIdCert {
+                signature,
                 serial_number,
                 issuer,
                 validity,
@@ -600,7 +603,7 @@ impl TbsIdCert {
         encode::sequence((
             encode::sequence_as(Tag::CTX_0, 2.encode()), // version
             self.serial_number.encode(),
-            RpkiSignatureAlgorithm::default().x509_encode(),
+            self.signature.x509_encode(),
             self.issuer.encode_ref(),
             self.validity.encode(),
             self.subject.encode_ref(),
@@ -657,6 +660,11 @@ impl TbsIdCert {
         let issuer = Name::from_pub_key(issuing_key);
         let subject = Name::from_pub_key(subject_key);
 
+        let signature = match issuing_key.algorithm() {
+            PublicKeyFormat::MlDsa65 => RpkiSignatureAlgorithm::MlDsa65,
+            _ => RpkiSignatureAlgorithm::default(),
+        };
+
         let basic_ca = if issuing_key == subject_key {
             Some(true)
         } else {
@@ -672,6 +680,7 @@ impl TbsIdCert {
         };
 
         TbsIdCert {
+            signature,
             serial_number,
             issuer,
             validity,
@@ -690,9 +699,10 @@ impl TbsIdCert {
         key: &S::KeyId,
     ) -> Result<IdCert, SigningError<S::Error>> {
         let data = Captured::from_values(Mode::Der, self.encode_ref());
-        let signature = signer.sign(
-            key, RpkiSignatureAlgorithm::default(), &data
-        )?;
+        let signature = signer.sign(key, &data)?;
+        if *signature.algorithm() != self.signature {
+            return Err(SigningError::IncompatibleKey);
+        }
         Ok(IdCert {
             signed_data: SignedData::new(data, signature),
             tbs: self,
