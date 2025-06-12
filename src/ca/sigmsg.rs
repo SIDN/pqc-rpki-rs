@@ -312,7 +312,7 @@ impl SignedMessage {
         );
         
         let (signature, ee_key) = signer.sign_one_off(
-            RpkiSignatureAlgorithm::default(), &signed_attrs.encode_verify()
+            &signed_attrs.encode_verify()
         )?;
         let sid = ee_key.key_identifier();
         

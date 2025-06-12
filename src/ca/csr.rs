@@ -232,9 +232,7 @@ impl Csr<(), ()> {
         )));
 
         let (alg, signature) = signer.sign(
-            key,
-            RpkiSignatureAlgorithm::default(),
-            &content
+            key, &content
         )?.unwrap();
 
         Ok(Captured::from_values(Mode::Der,

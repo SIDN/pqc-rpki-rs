@@ -931,9 +931,11 @@ impl SignedObjectBuilder {
         );
 
         // Sign signed attributes with a one-off key.
-        let (signature, key_info) = signer.sign_one_off(
-            RpkiSignatureAlgorithm::default(), &signed_attrs.encode_verify()
-        )?;
+        // The algorithm used here is determined by the signer, 
+        // and encoded in the SignerInfo signatureAlgorithm.
+        // It matches the public key in the EE cert, but needn't match the
+        // algorithm used to _sign_ the EE cert (which is using the issuer key).
+        let (signature, key_info) = signer.sign_one_off(&signed_attrs.encode_verify())?;
         let sid = key_info.key_identifier();
 
         // Make the certificate.

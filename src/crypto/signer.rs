@@ -2,7 +2,7 @@
 
 use std::fmt;
 use super::keys::{PublicKey, PublicKeyFormat};
-use super::signature::{SignatureAlgorithm, Signature};
+use super::RpkiSignature;
 
 
 //------------ Signer --------------------------------------------------------
@@ -38,22 +38,20 @@ pub trait Signer {
     ) -> Result<(), KeyError<Self::Error>>;
 
     /// Signs data.
-    fn sign<Alg: SignatureAlgorithm, D: AsRef<[u8]> + ?Sized>(
+    fn sign<D: AsRef<[u8]> + ?Sized>(
         &self,
         key: &Self::KeyId,
-        algorithm: Alg,
         data: &D
-    ) -> Result<Signature<Alg>, SigningError<Self::Error>>;
+    ) -> Result<RpkiSignature, SigningError<Self::Error>>;
 
     /// Signs data using a one time use keypair.
     ///
     /// Returns both the signature and the public key of the key pair,
     /// but will not store this key pair.
-    fn sign_one_off<Alg: SignatureAlgorithm, D: AsRef<[u8]> + ?Sized>(
+    fn sign_one_off<D: AsRef<[u8]> + ?Sized>(
         &self,
-        algorithm: Alg,
         data: &D
-    ) -> Result<(Signature<Alg>, PublicKey), Self::Error>;
+    ) -> Result<(RpkiSignature, PublicKey), Self::Error>;
 
     /// Creates random data.
     ///

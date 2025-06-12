@@ -14,8 +14,9 @@ use openssl::hash::MessageDigest;
 use ring::rand;
 use ring::rand::SecureRandom;
 use super::keys::{PublicKey, PublicKeyFormat};
-use super::signer::{KeyError, Signer, SigningAlgorithm, SigningError};
-use super::signature::{SignatureAlgorithm, Signature};
+use super::signer::{KeyError, Signer, SigningError};
+use super::signature::Signature;
+use super::{RpkiSignature, RpkiSignatureAlgorithm};
 
 
 
@@ -33,6 +34,7 @@ struct OQSKeyPair {
     skey: oqs::sig::SecretKey,
 }
 
+// TODO: move OQS to separate crate
 impl OQSKeyPair {
     fn new(algorithm: PublicKeyFormat) -> Result<Self, oqs::Error> {
         match algorithm {
@@ -46,20 +48,13 @@ impl OQSKeyPair {
         
     }
 
-    fn sign<Alg: SignatureAlgorithm>(
+    fn sign(
         &self,
-        algorithm: Alg,
         data: &[u8]
-    ) -> Result<Signature<Alg>, oqs::Error> {
-        if !matches!(
-            algorithm.signing_algorithm(), SigningAlgorithm::MlDsa65
-        ) {
-            return Err(oqs::Error::AlgorithmDisabled);
-        }
-
+    ) -> Result<RpkiSignature, oqs::Error> {
         let sigalg = oqs::sig::Sig::new(self.alg)?;
         let sig = sigalg.sign(data, &self.skey)?;
-        Ok(Signature::new(algorithm, sig.into_vec().into()))
+        Ok(Signature::new(RpkiSignatureAlgorithm::MlDsa65, sig.into_vec().into()))
     }
 
     fn get_key_info(&self) -> Result<PublicKey, oqs::Error> {
@@ -135,23 +130,21 @@ impl Signer for OQSSigner {
         self.delete_key(*key)
     }
 
-    fn sign<Alg: SignatureAlgorithm, D: AsRef<[u8]> + ?Sized>(
+    fn sign<D: AsRef<[u8]> + ?Sized>(
         &self,
         key: &Self::KeyId,
-        algorithm: Alg,
         data: &D
-    ) -> Result<Signature<Alg>, SigningError<Self::Error>> {
-        self.get_key(*key)?.sign(algorithm, data.as_ref()).map_err(Into::into)
+    ) -> Result<RpkiSignature, SigningError<Self::Error>> {
+        self.get_key(*key)?.sign(data.as_ref()).map_err(Into::into)
     }
 
-    fn sign_one_off<Alg: SignatureAlgorithm, D: AsRef<[u8]> + ?Sized>(
+    fn sign_one_off<D: AsRef<[u8]> + ?Sized>(
         &self,
-        algorithm: Alg,
         data: &D
-    ) -> Result<(Signature<Alg>, PublicKey), Self::Error> {
-        let key = OQSKeyPair::new(algorithm.public_key_format())?;
+    ) -> Result<(RpkiSignature, PublicKey), Self::Error> {
+        let key = OQSKeyPair::new(PublicKeyFormat::MlDsa65)?;
         let info = key.get_key_info()?;
-        let sig = key.sign(algorithm, data.as_ref())?;
+        let sig = key.sign(data.as_ref())?;
         Ok((sig, info))
     }
 
@@ -249,23 +242,21 @@ impl Signer for OpenSslSigner {
         self.delete_key(*key)
     }
 
-    fn sign<Alg: SignatureAlgorithm, D: AsRef<[u8]> + ?Sized>(
+    fn sign<D: AsRef<[u8]> + ?Sized>(
         &self,
         key: &Self::KeyId,
-        algorithm: Alg,
         data: &D
-    ) -> Result<Signature<Alg>, SigningError<Self::Error>> {
-        self.get_key(*key)?.sign(algorithm, data.as_ref()).map_err(Into::into)
+    ) -> Result<RpkiSignature, SigningError<Self::Error>> {
+        self.get_key(*key)?.sign(data.as_ref()).map_err(Into::into)
     }
 
-    fn sign_one_off<Alg: SignatureAlgorithm, D: AsRef<[u8]> + ?Sized>(
+    fn sign_one_off<D: AsRef<[u8]> + ?Sized>(
         &self,
-        algorithm: Alg,
         data: &D
-    ) -> Result<(Signature<Alg>, PublicKey), Self::Error> {
-        let key = KeyPair::new(algorithm.public_key_format())?;
+    ) -> Result<(RpkiSignature, PublicKey), Self::Error> {
+        let key = KeyPair::new(PublicKeyFormat::Rsa)?;
         let info = key.get_key_info()?;
-        let sig = key.sign(algorithm, data.as_ref())?;
+        let sig = key.sign(data.as_ref())?;
         Ok((sig, info))
     }
 
@@ -343,24 +334,15 @@ impl KeyPair {
         Ok(PublicKey::decode(der.as_slice().into_source()).unwrap())
     }
 
-    fn sign<Alg: SignatureAlgorithm>(
+    fn sign(
         &self,
-        algorithm: Alg,
         data: &[u8]
-    ) -> Result<Signature<Alg>, io::Error> {
-        if !matches!(
-            algorithm.signing_algorithm(), SigningAlgorithm::RsaSha256
-        ) {
-            return Err(io::Error::new(
-                io::ErrorKind::Other,
-                "invalid algorithm"
-            ));
-        }
+    ) -> Result<RpkiSignature, io::Error> {
         let mut signer = ::openssl::sign::Signer::new(
             MessageDigest::sha256(), &self.0
         )?;
         signer.update(data)?;
-        Ok(Signature::new(algorithm, signer.sign_to_vec()?.into()))
+        Ok(Signature::new(RpkiSignatureAlgorithm::default(), signer.sign_to_vec()?.into()))
     }
 }
 
@@ -371,7 +353,6 @@ impl KeyPair {
 pub mod tests {
 
     use super::*;
-    use crate::crypto::signature::RpkiSignatureAlgorithm;
 
     #[test]
     fn info_sign_delete() {
@@ -379,14 +360,14 @@ pub mod tests {
         let ki = s.create_key(PublicKeyFormat::Rsa).unwrap();
         let data = b"foobar";
         let _ = s.get_key_info(&ki).unwrap();
-        let _ = s.sign(&ki, RpkiSignatureAlgorithm::default(), data).unwrap();
+        let _ = s.sign(&ki, data).unwrap();
         s.destroy_key(&ki).unwrap();
     }
     
     #[test]
     fn one_off() {
         let s = OpenSslSigner::new();
-        s.sign_one_off(RpkiSignatureAlgorithm::default(), b"foobar").unwrap();
+        s.sign_one_off(b"foobar").unwrap();
     }
 }
 
@@ -396,7 +377,6 @@ pub mod tests {
 pub mod pqc_tests {
 
     use super::*;
-    use crate::crypto::signature::RpkiSignatureAlgorithm;
 
     #[test]
     fn create_sign_verify() {
@@ -404,7 +384,7 @@ pub mod pqc_tests {
         let ki = s.create_key(PublicKeyFormat::MlDsa65).unwrap();
         let data = b"foobar";
         let pk = s.get_key_info(&ki).unwrap();
-        let signature = s.sign(&ki, RpkiSignatureAlgorithm::MlDsa65 , data).unwrap();
+        let signature = s.sign(&ki, data).unwrap();
         pk.verify(b"foobar", &signature).unwrap();
         s.destroy_key(&ki).unwrap();
     }
@@ -412,6 +392,6 @@ pub mod pqc_tests {
     #[test]
     fn one_off() {
         let s = OQSSigner::new();
-        s.sign_one_off(RpkiSignatureAlgorithm::MlDsa65, b"foobar").unwrap();
+        s.sign_one_off(b"foobar").unwrap();
     }
 }
