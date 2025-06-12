@@ -19,6 +19,156 @@ use super::signature::{SignatureAlgorithm, Signature};
 
 
 
+//------------ OQSSigner -------------------------------------------------
+
+pub struct OQSSigner {
+    keys: RwLock<Vec<Option<Arc<OQSKeyPair>>>>,
+    rng: rand::SystemRandom,
+
+}
+
+struct OQSKeyPair {
+    alg: oqs::sig::Algorithm,
+    pkey: oqs::sig::PublicKey,
+    skey: oqs::sig::SecretKey,
+}
+
+impl OQSKeyPair {
+    fn new(algorithm: PublicKeyFormat) -> Result<Self, oqs::Error> {
+        match algorithm {
+            PublicKeyFormat::MlDsa65 => {
+                let sigalg = oqs::sig::Sig::new(oqs::sig::Algorithm::MlDsa65)?;
+                let (pkey, skey) = sigalg.keypair()?;
+                Ok(OQSKeyPair { pkey, skey, alg: oqs::sig::Algorithm::MlDsa65 })
+            }
+            _ => Err(oqs::Error::AlgorithmDisabled)
+        }
+        
+    }
+
+    fn sign<Alg: SignatureAlgorithm>(
+        &self,
+        algorithm: Alg,
+        data: &[u8]
+    ) -> Result<Signature<Alg>, oqs::Error> {
+        if !matches!(
+            algorithm.signing_algorithm(), SigningAlgorithm::MlDsa65
+        ) {
+            return Err(oqs::Error::AlgorithmDisabled);
+        }
+
+        let sigalg = oqs::sig::Sig::new(self.alg)?;
+        let sig = sigalg.sign(data, &self.skey)?;
+        Ok(Signature::new(algorithm, sig.into_vec().into()))
+    }
+
+    fn get_key_info(&self) -> Result<PublicKey, oqs::Error> {
+        match self.alg {
+            oqs::sig::Algorithm::MlDsa65 => {
+                Ok(PublicKey::mldsa65_from_bytes(self.pkey.clone().into_vec().into()))
+            }
+            _ => Err(oqs::Error::AlgorithmDisabled)
+        }
+    }
+}
+
+impl OQSSigner {
+    pub fn new() -> OQSSigner {
+        OQSSigner {
+            keys: Default::default(),
+            rng: rand::SystemRandom::new(),
+        }
+    }
+
+    fn insert_key(&self, key: OQSKeyPair) -> KeyId {
+        let mut keys = self.keys.write().unwrap();
+        let res = keys.len();
+        keys.push(Some(key.into()));
+        KeyId(res)
+    }
+
+    fn get_key(&self, id: KeyId) -> Result<Arc<OQSKeyPair>, KeyError<oqs::Error>> {
+        self.keys.read().unwrap().get(id.0).and_then(|key| {
+            key.as_ref().cloned()
+        }).ok_or(KeyError::KeyNotFound)
+    }
+
+    fn delete_key(&self, key: KeyId) -> Result<(), KeyError<oqs::Error>> {
+        let mut keys = self.keys.write().unwrap();
+        let key = keys.get_mut(key.0);
+        match key {
+            Some(key) => {
+                if key.is_some() {
+                    *key = None;
+                    Ok(())
+                }
+                else {
+                    Err(KeyError::KeyNotFound)
+                }
+            }
+            None => Err(KeyError::KeyNotFound)
+        }
+    }
+}
+
+impl Signer for OQSSigner {
+    type KeyId = KeyId;
+    type Error = oqs::Error;
+
+    fn create_key(
+        &self,
+        algorithm: PublicKeyFormat
+    ) -> Result<Self::KeyId, Self::Error> {
+        Ok(self.insert_key(OQSKeyPair::new(algorithm)?))   
+    }
+
+    fn get_key_info(
+        &self,
+        id: &Self::KeyId
+    ) -> Result<PublicKey, KeyError<Self::Error>> {
+        self.get_key(*id)?.get_key_info().map_err(KeyError::Signer)
+    }
+
+    fn destroy_key(
+        &self, key: &Self::KeyId
+    ) -> Result<(), KeyError<Self::Error>> {
+        self.delete_key(*key)
+    }
+
+    fn sign<Alg: SignatureAlgorithm, D: AsRef<[u8]> + ?Sized>(
+        &self,
+        key: &Self::KeyId,
+        algorithm: Alg,
+        data: &D
+    ) -> Result<Signature<Alg>, SigningError<Self::Error>> {
+        self.get_key(*key)?.sign(algorithm, data.as_ref()).map_err(Into::into)
+    }
+
+    fn sign_one_off<Alg: SignatureAlgorithm, D: AsRef<[u8]> + ?Sized>(
+        &self,
+        algorithm: Alg,
+        data: &D
+    ) -> Result<(Signature<Alg>, PublicKey), Self::Error> {
+        let key = OQSKeyPair::new(algorithm.public_key_format())?;
+        let info = key.get_key_info()?;
+        let sig = key.sign(algorithm, data.as_ref())?;
+        Ok((sig, info))
+    }
+
+    fn rand(&self, target: &mut [u8]) -> Result<(), Self::Error> {
+        self.rng.fill(target).map_err(|_|
+            oqs::Error::Error
+        )
+    }
+}
+
+
+impl Default for OQSSigner {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 //------------ OpenSslSigner -------------------------------------------------
 
 /// An OpenSSL based signer.
