@@ -705,13 +705,14 @@ impl ProcessSnapshot for SnapshotBuilder {
         Ok(())
     }
 
-    fn publish(&mut self, uri: uri::Rsync, data: &mut ObjectReader) -> Result<(), Self::Err> {
+    fn publish(&mut self, uri: uri::Rsync, data: &mut ObjectReader) -> Result<usize, Self::Err> {
         let mut buf = Vec::new();
         data.read_to_end(&mut buf)?;
         let data = Bytes::from(buf);
+        let size: usize = data.len();
         let element = PublishElement { uri, data };
         self.elements.push(element);
-        Ok(())
+        Ok(size)
     }
 }
 
@@ -769,7 +770,7 @@ pub trait ProcessSnapshot {
         &mut self,
         uri: uri::Rsync,
         data: &mut ObjectReader,
-    ) -> Result<(), Self::Err>;
+    ) -> Result<usize, Self::Err>;
 
     /// Processes a snapshot file.
     ///
@@ -825,7 +826,7 @@ pub trait ProcessSnapshot {
                 return Err(ProcessError::malformed().into())
             }
         }
-
+        let mut size: usize = 0;
         loop {
             let mut uri = None;
             let inner = outer.take_opt_element_with_limit(
@@ -857,9 +858,12 @@ pub trait ProcessSnapshot {
                 None => return Err(ProcessError::malformed().into())
             };
             ObjectReader::process(&mut inner, &mut reader, |reader| {
-                self.publish(uri, reader)
+                size += self.publish(uri, reader).unwrap_or(0);
+                Ok(())
             })?;
         }
+
+        info!("content size: {}, snapshot, {}, {}", size, session_id.unwrap(), serial.unwrap());
 
         outer.take_end(&mut reader).map_err(Into::into)?;
         reader.end().map_err(Into::into)?;
@@ -986,10 +990,11 @@ impl ProcessDelta for DeltaBuilder {
         uri: uri::Rsync,
         hash_opt: Option<Hash>,
         data: &mut ObjectReader,
-    ) -> Result<(), Self::Err> {
+    ) -> Result<usize, Self::Err> {
         let mut buf = Vec::new();
         data.read_to_end(&mut buf)?;
         let data = Bytes::from(buf);
+        let size: usize = data.len();
         match hash_opt {
             Some(hash) => {
                 let update = UpdateElement { uri, hash, data};
@@ -1000,7 +1005,7 @@ impl ProcessDelta for DeltaBuilder {
                 self.elements.push(DeltaElement::Publish(publish));
             }
         }
-        Ok(())
+        Ok(size)
     }
 
     fn withdraw(
@@ -1073,7 +1078,7 @@ pub trait ProcessDelta {
         uri: uri::Rsync,
         hash: Option<Hash>,
         data: &mut ObjectReader,
-    ) -> Result<(), Self::Err>;
+    ) -> Result<usize, Self::Err>;
 
     /// Processes a withdrawn object.
     ///
@@ -1652,8 +1657,8 @@ mod test {
             &mut self,
             _uri: uri::Rsync,
             _data: &mut ObjectReader,
-        ) -> Result<(), Self::Err> {
-            Ok(())
+        ) -> Result<usize, Self::Err> {
+            Ok(0)
         }
     }
 
@@ -1673,8 +1678,8 @@ mod test {
             _uri: uri::Rsync,
             _hash: Option<Hash>,
             _data: &mut ObjectReader,
-        ) -> Result<(), Self::Err> {
-            Ok(())
+        ) -> Result<usize, Self::Err> {
+            Ok(0)
         }
 
         fn withdraw(
