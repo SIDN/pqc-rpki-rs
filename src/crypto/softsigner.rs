@@ -29,7 +29,7 @@ pub struct OQSSigner {
 }
 
 struct OQSKeyPair {
-    alg: oqs::sig::Algorithm,
+    algorithm: PublicKeyFormat,
     pkey: oqs::sig::PublicKey,
     skey: oqs::sig::SecretKey,
 }
@@ -38,10 +38,15 @@ struct OQSKeyPair {
 impl OQSKeyPair {
     fn new(algorithm: PublicKeyFormat) -> Result<Self, oqs::Error> {
         match algorithm {
+            PublicKeyFormat::FnDsa512 => {
+                let sigalg = oqs::sig::Sig::new(oqs::sig::Algorithm::Falcon512)?;
+                let (pkey, skey) = sigalg.keypair()?;
+                Ok(OQSKeyPair { pkey, skey, algorithm })
+            }
             PublicKeyFormat::MlDsa65 => {
                 let sigalg = oqs::sig::Sig::new(oqs::sig::Algorithm::MlDsa65)?;
                 let (pkey, skey) = sigalg.keypair()?;
-                Ok(OQSKeyPair { pkey, skey, alg: oqs::sig::Algorithm::MlDsa65 })
+                Ok(OQSKeyPair { pkey, skey, algorithm })
             }
             _ => Err(oqs::Error::AlgorithmDisabled)
         }
@@ -52,14 +57,26 @@ impl OQSKeyPair {
         &self,
         data: &[u8]
     ) -> Result<RpkiSignature, oqs::Error> {
-        let sigalg = oqs::sig::Sig::new(self.alg)?;
+        let alg = match self.algorithm {
+            PublicKeyFormat::FnDsa512 => oqs::sig::Algorithm::Falcon512,
+            PublicKeyFormat::MlDsa65 => oqs::sig::Algorithm::MlDsa65,
+            _ => return Err(oqs::Error::AlgorithmDisabled)
+        };
+        let sigalg = oqs::sig::Sig::new(alg)?;
         let sig = sigalg.sign(data, &self.skey)?;
-        Ok(Signature::new(RpkiSignatureAlgorithm::MlDsa65, sig.into_vec().into()))
+        Ok(Signature::new(match self.algorithm {
+            PublicKeyFormat::FnDsa512 => RpkiSignatureAlgorithm::FnDsa512,
+            PublicKeyFormat::MlDsa65 => RpkiSignatureAlgorithm::MlDsa65,
+            _ => unreachable!()
+        }, sig.into_vec().into()))
     }
 
     fn get_key_info(&self) -> Result<PublicKey, oqs::Error> {
-        match self.alg {
-            oqs::sig::Algorithm::MlDsa65 => {
+        match self.algorithm {
+            PublicKeyFormat::FnDsa512 => {
+                Ok(PublicKey::fndsa512_from_bytes(self.pkey.clone().into_vec().into()))
+            }
+            PublicKeyFormat::MlDsa65 => {
                 Ok(PublicKey::mldsa65_from_bytes(self.pkey.clone().into_vec().into()))
             }
             _ => Err(oqs::Error::AlgorithmDisabled)
@@ -113,7 +130,7 @@ impl Signer for OQSSigner {
     fn create_key(
         &self,
     ) -> Result<Self::KeyId, Self::Error> {
-        Ok(self.insert_key(OQSKeyPair::new(PublicKeyFormat::MlDsa65)?))   
+        Ok(self.insert_key(OQSKeyPair::new(PublicKeyFormat::FnDsa512)?))   
     }
 
     fn get_key_info(
@@ -141,7 +158,7 @@ impl Signer for OQSSigner {
         &self,
         data: &D
     ) -> Result<(RpkiSignature, PublicKey), Self::Error> {
-        let key = OQSKeyPair::new(PublicKeyFormat::MlDsa65)?;
+        let key = OQSKeyPair::new(PublicKeyFormat::FnDsa512)?;
         let info = key.get_key_info()?;
         let sig = key.sign(data.as_ref())?;
         Ok((sig, info))

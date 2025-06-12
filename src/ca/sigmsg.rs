@@ -485,6 +485,7 @@ impl SignedMessageCrl {
         let signature_algorithm = match issuing_pub_key.algorithm() {
             PublicKeyFormat::Rsa => Ok(RpkiSignatureAlgorithm::default()),
             PublicKeyFormat::MlDsa65 => Ok(RpkiSignatureAlgorithm::MlDsa65),
+            PublicKeyFormat::FnDsa512 => Ok(RpkiSignatureAlgorithm::FnDsa512),
             PublicKeyFormat::EcdsaP256 => Err(SigningError::IncompatibleKey),
         }?;
         let issuer = Name::from_pub_key(&issuing_pub_key);

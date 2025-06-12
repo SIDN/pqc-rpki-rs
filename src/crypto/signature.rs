@@ -64,6 +64,7 @@ pub enum RpkiSignatureAlgorithm {
         has_parameter: bool,
     },
     MlDsa65,
+    FnDsa512,
 }
 
 /// # ASN.1 Values
@@ -114,8 +115,10 @@ impl RpkiSignatureAlgorithm {
             )?.is_some();
             Ok(RpkiSignatureAlgorithm::RsaSha256 { has_parameter } )
         } else if oid == oid::MLDSA65 {
-            // TODO: figure out if MlDsa in x509 has a NULL parameter or no parameter
             Ok(RpkiSignatureAlgorithm::MlDsa65)
+        } else if oid == oid::FNDSA512 {
+            // TODO: FN-DSA formats have not been made yet. This is simply copied form ML-DSA.
+            Ok(RpkiSignatureAlgorithm::FnDsa512)        
         } else {
             Err(cons.content_err("invalid signature algorithm"))
         }
@@ -150,8 +153,10 @@ impl RpkiSignatureAlgorithm {
             // [draft-ietf-lamps-dilithium-certificates-07] it seems that
             // the parameter is consistently absent, not NULL.
             Ok(RpkiSignatureAlgorithm::MlDsa65)
-        }
-        else {
+        } else if oid == oid::FNDSA512 {
+            // TODO: FN-DSA formats have not been made yet. This is simply copied from ML-DSA.
+            Ok(RpkiSignatureAlgorithm::FnDsa512)        
+        } else {
             Err(cons.content_err("invalid signature algorithm"))
         }
     }
@@ -170,6 +175,9 @@ impl RpkiSignatureAlgorithm {
             RpkiSignatureAlgorithm::MlDsa65 => encode::Choice2::Two(encode::sequence((
                 oid::MLDSA65.encode(),
             ))),
+            RpkiSignatureAlgorithm::FnDsa512 => encode::Choice2::Two(encode::sequence((
+                oid::FNDSA512.encode(),
+            ))),
         }
     }
 
@@ -186,6 +194,9 @@ impl RpkiSignatureAlgorithm {
             ))),
             RpkiSignatureAlgorithm::MlDsa65 => encode::Choice2::Two(encode::sequence((
                 oid::MLDSA65.encode(),
+            ))),
+            RpkiSignatureAlgorithm::FnDsa512 => encode::Choice2::Two(encode::sequence((
+                oid::FNDSA512.encode(),
             ))),
         }
     }
@@ -213,6 +224,7 @@ impl SignatureAlgorithm for RpkiSignatureAlgorithm {
         match *self {
             RpkiSignatureAlgorithm::RsaSha256 { .. } => SigningAlgorithm::RsaSha256,
             RpkiSignatureAlgorithm::MlDsa65 => SigningAlgorithm::MlDsa65,
+            RpkiSignatureAlgorithm::FnDsa512 => SigningAlgorithm::FnDsa512,
         }
     }
 
@@ -234,6 +246,12 @@ impl SignatureAlgorithm for RpkiSignatureAlgorithm {
                 encode::Constructed::new( 
                     Tag::SEQUENCE, 
                     (oid::MLDSA65.encode(),),
+                ),
+            ),
+            RpkiSignatureAlgorithm::FnDsa512 => encode::Choice2::Two(
+                encode::Constructed::new(
+                    Tag::SEQUENCE,
+                    (oid::FNDSA512.encode(),),
                 ),
             ),
         }
@@ -314,16 +332,17 @@ impl<Alg> Signature<Alg> {
     }
 }
 
-pub fn verify_mldsa65(
+pub fn verify_pq(
     public_key: untrusted::Input,
     msg: untrusted::Input,
     signature: untrusted::Input,
+    algorithm: oqs::sig::Algorithm,
 ) -> Result<(), ()> {
     // This needs to happen once, but is safe to call multiple times
     // as it internally uses `std::sync::Once`.
     oqs::init();
 
-    let sigalg = oqs::sig::Sig::new(oqs::sig::Algorithm::MlDsa65).map_err(|_| ())?;
+    let sigalg = oqs::sig::Sig::new(algorithm).map_err(|_| ())?;
     let pk = sigalg
         .public_key_from_bytes(public_key.as_slice_less_safe())
         .ok_or(())?;

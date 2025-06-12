@@ -662,6 +662,7 @@ impl TbsIdCert {
 
         let signature = match issuing_key.algorithm() {
             PublicKeyFormat::MlDsa65 => RpkiSignatureAlgorithm::MlDsa65,
+            PublicKeyFormat::FnDsa512 => RpkiSignatureAlgorithm::FnDsa512,
             _ => RpkiSignatureAlgorithm::default(),
         };
 

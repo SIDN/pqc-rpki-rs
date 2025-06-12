@@ -922,6 +922,7 @@ impl SignedObjectBuilder {
         let cert_algorithm = match issuer_pub.algorithm() {
             PublicKeyFormat::Rsa => Ok(RpkiSignatureAlgorithm::default()),
             PublicKeyFormat::MlDsa65 => Ok(RpkiSignatureAlgorithm::MlDsa65),
+            PublicKeyFormat::FnDsa512 => Ok(RpkiSignatureAlgorithm::FnDsa512),
             PublicKeyFormat::EcdsaP256 => Err(SigningError::IncompatibleKey),
         }?;
 

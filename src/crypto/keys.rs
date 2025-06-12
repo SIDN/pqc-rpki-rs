@@ -16,7 +16,7 @@ use untrusted::Input;
 use crate::oid;
 #[cfg(feature = "serde")] use crate::util::base64;
 use crate::util::hex;
-use super::signature::{RpkiSignatureAlgorithm, Signature, SignatureAlgorithm, verify_mldsa65};
+use super::signature::{RpkiSignatureAlgorithm, Signature, SignatureAlgorithm, verify_pq};
 
 
 //------------ PublicKeyFormat -----------------------------------------------
@@ -42,6 +42,11 @@ pub enum PublicKeyFormat {
     /// These keys may be used by RPKI resource certificates.
     MlDsa65,
 
+    /// An FN-DSA-512 public key.
+    /// 
+    /// These keys may be used by RPKI resource certificates.
+    FnDsa512,
+    
     /// An ECDSA public key for the P-256 elliptic curve.
     ///
     /// These keys must be used by all BGPSec router certificates.
@@ -55,7 +60,7 @@ impl PublicKeyFormat {
     /// repository itself, i.e., CA certificates and EE certificates for
     /// signed objects.
     pub fn allow_rpki_cert(self) -> bool {
-        matches!(self, PublicKeyFormat::Rsa | PublicKeyFormat::MlDsa65)
+        matches!(self, PublicKeyFormat::Rsa | PublicKeyFormat::MlDsa65 | PublicKeyFormat::FnDsa512)
     }
 
     /// Returns whether the format is acceptable for router certificates.
@@ -116,6 +121,9 @@ impl PublicKeyFormat{
         else if alg == oid::MLDSA65 {
             Ok(PublicKeyFormat::MlDsa65)
         }
+        else if alg == oid::FNDSA512 {
+            Ok(PublicKeyFormat::FnDsa512)
+        }
         else {
             Err(cons.content_err("invalid public key format"))
         }
@@ -136,6 +144,13 @@ impl PublicKeyFormat{
                 encode::Choice3::Two(
                     encode::sequence((
                         oid::MLDSA65.encode(),
+                    ))
+                )
+            }
+            PublicKeyFormat::FnDsa512 => {
+                encode::Choice3::Two(
+                    encode::sequence((
+                        oid::FNDSA512.encode(),
                     ))
                 )
             }
@@ -163,8 +178,13 @@ impl PublicKeyFormat{
                 ).map_err(Into::into)
             }
             PublicKeyFormat::MlDsa65 => {
-                verify_mldsa65(
-                    bits, message, signature
+                verify_pq(
+                    bits, message, signature, oqs::sig::Algorithm::MlDsa65
+                ).map_err(|_| SignatureVerificationError(()))
+            }
+            PublicKeyFormat::FnDsa512 => {
+                verify_pq(
+                    bits, message, signature, oqs::sig::Algorithm::Falcon512
                 ).map_err(|_| SignatureVerificationError(()))
             }
             PublicKeyFormat::EcdsaP256 => {
@@ -250,12 +270,22 @@ impl PublicKey {
         })
     }
     
-    /// Creates an ML-DSA-65 public key from the key’s bits.
+    /// Creates an ML-DSA-65 public key from the key's bits.
     pub fn mldsa65_from_bytes(
         bytes: Bytes
     ) -> Self {
         PublicKey {
             algorithm: PublicKeyFormat::MlDsa65,
+            bits: BitString::new(0, bytes)
+        }
+    }
+
+    /// Creates an FN-DSA-512 public key from the key's bits.
+    pub fn fndsa512_from_bytes(
+        bytes: Bytes
+    ) -> Self {
+        PublicKey {
+            algorithm: PublicKeyFormat::FnDsa512,
             bits: BitString::new(0, bytes)
         }
     }

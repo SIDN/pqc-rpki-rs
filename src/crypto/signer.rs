@@ -70,6 +70,9 @@ pub enum SigningAlgorithm {
     /// ML-DSA-65 in 'pure mode'.
     MlDsa65,
 
+    /// FN-DSA-512.
+    FnDsa512,
+
     /// ECDSA using the P-256 curva and SHA-256.
     EcdsaP256Sha256,
 }
@@ -80,6 +83,7 @@ impl SigningAlgorithm {
         match self {
             SigningAlgorithm::RsaSha256 => PublicKeyFormat::Rsa,
             SigningAlgorithm::MlDsa65 => PublicKeyFormat::MlDsa65,
+            SigningAlgorithm::FnDsa512 => PublicKeyFormat::FnDsa512,
             SigningAlgorithm::EcdsaP256Sha256 => PublicKeyFormat::EcdsaP256,
         }
     }

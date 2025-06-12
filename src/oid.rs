@@ -27,6 +27,12 @@ pub const RSA_ENCRYPTION: ConstOid
 pub const MLDSA65: ConstOid
     = Oid(&[96, 134, 72, 1, 101, 3, 4, 3, 18]);
 
+/// Temporary placeholder: Identifies an FN-DSA-512 public key.
+/// 
+/// https://github.com/open-quantum-safe/oqs-provider/blob/main/oqs-template/oqs-sig-info.md
+pub const FNDSA512: ConstOid
+    = Oid(&[43, 206, 15, 3, 11]);
+    
 /// [RFC 4055](https://tools.ietf.org/html/rfc4055) `sha256WithRSAEncryption`
 ///
 /// Identifies the PKCS #1 version 1.5 signature algorithm with SHA-256.
