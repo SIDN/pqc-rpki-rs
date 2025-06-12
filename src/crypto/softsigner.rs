@@ -390,3 +390,28 @@ pub mod tests {
     }
 }
 
+
+
+#[cfg(test)]
+pub mod pqc_tests {
+
+    use super::*;
+    use crate::crypto::signature::RpkiSignatureAlgorithm;
+
+    #[test]
+    fn create_sign_verify() {
+        let s = OQSSigner::new();
+        let ki = s.create_key(PublicKeyFormat::MlDsa65).unwrap();
+        let data = b"foobar";
+        let pk = s.get_key_info(&ki).unwrap();
+        let signature = s.sign(&ki, RpkiSignatureAlgorithm::mldsa65() , data).unwrap();
+        pk.verify(b"foobar", &signature).unwrap();
+        s.destroy_key(&ki).unwrap();
+    }
+    
+    #[test]
+    fn one_off() {
+        let s = OQSSigner::new();
+        s.sign_one_off(RpkiSignatureAlgorithm::mldsa65(), b"foobar").unwrap();
+    }
+}

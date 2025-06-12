@@ -60,7 +60,12 @@ pub struct RpkiSignatureAlgorithm {
     /// is missing.
     ///
     /// Constructed values will always have this set to `true`.
-    has_parameter: bool
+    has_parameter: bool,
+
+    /// The type of the public key.
+    /// 
+    /// This is normally RSA, but could be e.g. ML-DSA-65 instead.
+    alg: SigningAlgorithm,
 }
 
 /// # ASN.1 Values
@@ -104,11 +109,22 @@ impl RpkiSignatureAlgorithm {
     fn x509_from_constructed<S: decode::Source>(
         cons: &mut decode::Constructed<S>
     ) -> Result<Self, DecodeError<S::Error>> {
-        oid::SHA256_WITH_RSA_ENCRYPTION.skip_if(cons)?;
+        let oid = cons.take_primitive_if(Tag::OID, |prim| {
+            let oid = Oid::from_primitive(prim)?;
+            if oid != oid::SHA256_WITH_RSA_ENCRYPTION && oid != oid::MLDSA65 {
+                return Err(prim.content_err("invalid signature algorithm"))
+            }
+            Ok(oid)
+        })?;
         let has_parameter = cons.take_opt_primitive_if(
             Tag::NULL, |_| Ok(())
         )?.is_some();
-        Ok(RpkiSignatureAlgorithm { has_parameter })
+        if oid == oid::SHA256_WITH_RSA_ENCRYPTION {
+            Ok(RpkiSignatureAlgorithm { has_parameter, alg: SigningAlgorithm::RsaSha256 })
+        }
+        else {
+            Ok(RpkiSignatureAlgorithm { has_parameter, alg: SigningAlgorithm::MlDsa65 })
+        }
     }
 
     /// Takes a signature algorithm identifier for CMS objects.
@@ -126,32 +142,55 @@ impl RpkiSignatureAlgorithm {
         cons: &mut decode::Constructed<S>
     ) -> Result<Self, DecodeError<S::Error>> {
         let oid = Oid::take_from(cons)?;
+
         if
-            oid != oid::RSA_ENCRYPTION
-            && oid != oid::SHA256_WITH_RSA_ENCRYPTION
+            oid == oid::RSA_ENCRYPTION
+            || oid == oid::SHA256_WITH_RSA_ENCRYPTION
         {
-            return Err(cons.content_err("invalid signature algorithm"))
+            let has_parameter = cons.take_opt_primitive_if(
+                Tag::NULL, |_| Ok(())
+            )?.is_some();
+            Ok(RpkiSignatureAlgorithm { has_parameter, alg: SigningAlgorithm::RsaSha256 })
         }
-        let has_parameter = cons.take_opt_primitive_if(
-            Tag::NULL, |_| Ok(())
-        )?.is_some();
-        Ok(RpkiSignatureAlgorithm { has_parameter })
+        else if oid == oid::MLDSA65 {
+            let has_parameter = cons.take_opt_primitive_if(
+                Tag::NULL, |_| Ok(())
+            )?.is_some();
+            Ok(RpkiSignatureAlgorithm { has_parameter, alg: SigningAlgorithm::MlDsa65 })
+        }
+        else {
+            Err(cons.content_err("invalid signature algorithm"))
+        }
     }
 
     /// Provides an encoder for X.509 objects.
     pub fn x509_encode(self) -> impl encode::Values {
+        let oid = match self.alg {
+            SigningAlgorithm::RsaSha256 => oid::SHA256_WITH_RSA_ENCRYPTION,
+            SigningAlgorithm::MlDsa65 => oid::MLDSA65,
+            _ => unreachable!()
+        };
         encode::sequence((
-            oid::SHA256_WITH_RSA_ENCRYPTION.encode(),
+            oid.encode(),
             ().encode(),
         ))
     }
 
     /// Provides an encoder for CMS objects.
     pub fn cms_encode(self) -> impl encode::Values {
+        let oid = match self.alg {
+            SigningAlgorithm::RsaSha256 => oid::RSA_ENCRYPTION,
+            SigningAlgorithm::MlDsa65 => oid::MLDSA65,
+            _ => unreachable!()
+        };
         encode::sequence((
-            oid::RSA_ENCRYPTION.encode(),
+            oid.encode(),
             ().encode(),
         ))
+    }
+
+    pub fn mldsa65() -> Self {
+        RpkiSignatureAlgorithm { has_parameter: true, alg: SigningAlgorithm::MlDsa65 }
     }
 }
 
@@ -160,7 +199,7 @@ impl RpkiSignatureAlgorithm {
 
 impl Default for RpkiSignatureAlgorithm {
     fn default() -> Self {
-        RpkiSignatureAlgorithm { has_parameter: true }
+        RpkiSignatureAlgorithm { has_parameter: true, alg: SigningAlgorithm::RsaSha256 }
     }
 }
 
@@ -173,7 +212,7 @@ impl SignatureAlgorithm for RpkiSignatureAlgorithm {
     )>;
 
     fn signing_algorithm(&self) -> SigningAlgorithm {
-        SigningAlgorithm::RsaSha256
+        self.alg
     }
 
     fn x509_take_from<S: decode::Source>(
@@ -183,9 +222,15 @@ impl SignatureAlgorithm for RpkiSignatureAlgorithm {
     }
 
     fn x509_encode(&self) -> Self::Encoder {
+        let oid = match self.alg {
+            SigningAlgorithm::RsaSha256 => oid::SHA256_WITH_RSA_ENCRYPTION,
+            SigningAlgorithm::MlDsa65 => oid::MLDSA65,
+            _ => unreachable!()
+        };
         encode::Constructed::new(
+
             Tag::SEQUENCE,
-            (oid::SHA256_WITH_RSA_ENCRYPTION.encode(), ().encode())
+            (oid.encode(), ().encode())
         )
     }
 }
