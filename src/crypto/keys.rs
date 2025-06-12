@@ -113,6 +113,9 @@ impl PublicKeyFormat{
             oid::SECP256R1.skip_if(cons)?;
             Ok(PublicKeyFormat::EcdsaP256)
         }
+        else if alg == oid::MLDSA65 {
+            Ok(PublicKeyFormat::MlDsa65)
+        }
         else {
             Err(cons.content_err("invalid public key format"))
         }
@@ -133,7 +136,6 @@ impl PublicKeyFormat{
                 encode::Choice3::Two(
                     encode::sequence((
                         oid::MLDSA65.encode(),
-                        ().encode(),
                     ))
                 )
             }

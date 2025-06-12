@@ -325,7 +325,7 @@ impl fmt::Display for ReadError {
 
 #[cfg(test)]
 mod test {
-    use crate::repository::cert::Cert;
+    use crate::{crypto::PublicKeyFormat, repository::cert::Cert};
     use super::*;
 
     #[test]
@@ -339,6 +339,13 @@ mod test {
             tal.key_info(),
             cert.subject_public_key_info(),
         );
+    }
+
+    #[test]
+    fn pqc_tal_read() {
+        let tal = include_bytes!("../../test-data/repository/pqc-test.tal");
+        let tal = Tal::read("pqc-test.tal", &mut tal.as_ref()).unwrap();
+        assert_eq!(tal.key_info().algorithm(), PublicKeyFormat::MlDsa65)
     }
 
     #[test]
