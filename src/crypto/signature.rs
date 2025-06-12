@@ -53,19 +53,17 @@ pub trait SignatureAlgorithm: Sized {
 ///
 /// [RFC 7935]: https://tools.ietf.org/html/rfc7935
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub struct RpkiSignatureAlgorithm {
-    /// Is the parameter field present?
-    ///
-    /// If `true`, then a parameter field is present and NULL. Otherwise it
-    /// is missing.
-    ///
-    /// Constructed values will always have this set to `true`.
-    has_parameter: bool,
-
-    /// The type of the public key.
-    /// 
-    /// This is normally RSA, but could be e.g. ML-DSA-65 instead.
-    alg: SigningAlgorithm,
+pub enum RpkiSignatureAlgorithm {
+    RsaSha256 {
+        /// Is the parameter field present?
+        ///
+        /// If `true`, then a parameter field is present and NULL. Otherwise it
+        /// is missing.
+        ///
+        /// Constructed values will always have this set to `true`.
+        has_parameter: bool,
+    },
+    MlDsa65,
 }
 
 /// # ASN.1 Values
@@ -109,21 +107,17 @@ impl RpkiSignatureAlgorithm {
     fn x509_from_constructed<S: decode::Source>(
         cons: &mut decode::Constructed<S>
     ) -> Result<Self, DecodeError<S::Error>> {
-        let oid = cons.take_primitive_if(Tag::OID, |prim| {
-            let oid = Oid::from_primitive(prim)?;
-            if oid != oid::SHA256_WITH_RSA_ENCRYPTION && oid != oid::MLDSA65 {
-                return Err(prim.content_err("invalid signature algorithm"))
-            }
-            Ok(oid)
-        })?;
-        let has_parameter = cons.take_opt_primitive_if(
-            Tag::NULL, |_| Ok(())
-        )?.is_some();
+        let oid = Oid::take_from(cons)?;
         if oid == oid::SHA256_WITH_RSA_ENCRYPTION {
-            Ok(RpkiSignatureAlgorithm { has_parameter, alg: SigningAlgorithm::RsaSha256 })
-        }
-        else {
-            Ok(RpkiSignatureAlgorithm { has_parameter, alg: SigningAlgorithm::MlDsa65 })
+            let has_parameter = cons.take_opt_primitive_if(
+                Tag::NULL, |_| Ok(())
+            )?.is_some();
+            Ok(RpkiSignatureAlgorithm::RsaSha256 { has_parameter } )
+        } else if oid == oid::MLDSA65 {
+            // TODO: figure out if MlDsa in x509 has a NULL parameter or no parameter
+            Ok(RpkiSignatureAlgorithm::MlDsa65)
+        } else {
+            Err(cons.content_err("invalid signature algorithm"))
         }
     }
 
@@ -150,13 +144,12 @@ impl RpkiSignatureAlgorithm {
             let has_parameter = cons.take_opt_primitive_if(
                 Tag::NULL, |_| Ok(())
             )?.is_some();
-            Ok(RpkiSignatureAlgorithm { has_parameter, alg: SigningAlgorithm::RsaSha256 })
-        }
-        else if oid == oid::MLDSA65 {
-            let has_parameter = cons.take_opt_primitive_if(
-                Tag::NULL, |_| Ok(())
-            )?.is_some();
-            Ok(RpkiSignatureAlgorithm { has_parameter, alg: SigningAlgorithm::MlDsa65 })
+            Ok(RpkiSignatureAlgorithm::RsaSha256 { has_parameter })
+        } else if oid == oid::MLDSA65 {
+            // From the examples in [draft-ietf-lamps-cms-ml-dsa-02] and 
+            // [draft-ietf-lamps-dilithium-certificates-07] it seems that
+            // the parameter is consistently absent, not NULL.
+            Ok(RpkiSignatureAlgorithm::MlDsa65)
         }
         else {
             Err(cons.content_err("invalid signature algorithm"))
@@ -164,33 +157,37 @@ impl RpkiSignatureAlgorithm {
     }
 
     /// Provides an encoder for X.509 objects.
-    pub fn x509_encode(self) -> impl encode::Values {
-        let oid = match self.alg {
-            SigningAlgorithm::RsaSha256 => oid::SHA256_WITH_RSA_ENCRYPTION,
-            SigningAlgorithm::MlDsa65 => oid::MLDSA65,
-            _ => unreachable!()
-        };
-        encode::sequence((
-            oid.encode(),
-            ().encode(),
-        ))
+    /// 
+    /// Returns a choice of very similar types that are not exactly the same because
+    /// for ML-DSA we do not include a NULL parameter to match (the examples in)
+    /// [draft-ietf-lamps-cms-ml-dsa-02] and [draft-ietf-lamps-dilithium-certificates-07].
+    pub fn x509_encode(&self) -> impl encode::Values {
+        match self {
+            RpkiSignatureAlgorithm::RsaSha256 { .. } => encode::Choice2::One(encode::sequence((
+                oid::SHA256_WITH_RSA_ENCRYPTION.encode(),
+                ().encode(),
+            ))),
+            RpkiSignatureAlgorithm::MlDsa65 => encode::Choice2::Two(encode::sequence((
+                oid::MLDSA65.encode(),
+            ))),
+        }
     }
 
     /// Provides an encoder for CMS objects.
-    pub fn cms_encode(self) -> impl encode::Values {
-        let oid = match self.alg {
-            SigningAlgorithm::RsaSha256 => oid::RSA_ENCRYPTION,
-            SigningAlgorithm::MlDsa65 => oid::MLDSA65,
-            _ => unreachable!()
-        };
-        encode::sequence((
-            oid.encode(),
-            ().encode(),
-        ))
-    }
-
-    pub fn mldsa65() -> Self {
-        RpkiSignatureAlgorithm { has_parameter: true, alg: SigningAlgorithm::MlDsa65 }
+    /// 
+    /// Returns a choice of very similar types that are not exactly the same because
+    /// for ML-DSA we do not include a NULL parameter to match (the examples in)
+    /// [draft-ietf-lamps-cms-ml-dsa-02] and [draft-ietf-lamps-dilithium-certificates-07].
+    pub fn cms_encode(&self) -> impl encode::Values {
+        match self {
+            RpkiSignatureAlgorithm::RsaSha256 { .. } => encode::Choice2::One(encode::sequence((
+                oid::RSA_ENCRYPTION.encode(),
+                ().encode(),
+            ))),
+            RpkiSignatureAlgorithm::MlDsa65 => encode::Choice2::Two(encode::sequence((
+                oid::MLDSA65.encode(),
+            ))),
+        }
     }
 }
 
@@ -199,7 +196,7 @@ impl RpkiSignatureAlgorithm {
 
 impl Default for RpkiSignatureAlgorithm {
     fn default() -> Self {
-        RpkiSignatureAlgorithm { has_parameter: true, alg: SigningAlgorithm::RsaSha256 }
+        RpkiSignatureAlgorithm::RsaSha256 { has_parameter: true }
     }
 }
 
@@ -207,12 +204,16 @@ impl Default for RpkiSignatureAlgorithm {
 //--- SignatureAlgorithm
 
 impl SignatureAlgorithm for RpkiSignatureAlgorithm {
-    type Encoder = encode::Constructed<(
-        encode::Primitive<ConstOid>, encode::Primitive<()>
-    )>;
+    type Encoder = encode::Choice2<
+        encode::Constructed<(encode::Primitive<ConstOid>, encode::Primitive<()>)>, 
+        encode::Constructed<(encode::Primitive<ConstOid>,)>,
+    >;
 
     fn signing_algorithm(&self) -> SigningAlgorithm {
-        self.alg
+        match *self {
+            RpkiSignatureAlgorithm::RsaSha256 { .. } => SigningAlgorithm::RsaSha256,
+            RpkiSignatureAlgorithm::MlDsa65 => SigningAlgorithm::MlDsa65,
+        }
     }
 
     fn x509_take_from<S: decode::Source>(
@@ -222,16 +223,20 @@ impl SignatureAlgorithm for RpkiSignatureAlgorithm {
     }
 
     fn x509_encode(&self) -> Self::Encoder {
-        let oid = match self.alg {
-            SigningAlgorithm::RsaSha256 => oid::SHA256_WITH_RSA_ENCRYPTION,
-            SigningAlgorithm::MlDsa65 => oid::MLDSA65,
-            _ => unreachable!()
-        };
-        encode::Constructed::new(
-
-            Tag::SEQUENCE,
-            (oid.encode(), ().encode())
-        )
+        match self {
+            RpkiSignatureAlgorithm::RsaSha256 { .. } => encode::Choice2::One(
+                encode::Constructed::new(
+                    Tag::SEQUENCE, 
+                    (oid::SHA256_WITH_RSA_ENCRYPTION.encode(), ().encode()),
+                ),
+            ),
+            RpkiSignatureAlgorithm::MlDsa65 => encode::Choice2::Two(
+                encode::Constructed::new( 
+                    Tag::SEQUENCE, 
+                    (oid::MLDSA65.encode(),),
+                ),
+            ),
+        }
     }
 }
 

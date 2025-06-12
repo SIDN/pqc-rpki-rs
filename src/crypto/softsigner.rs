@@ -404,7 +404,7 @@ pub mod pqc_tests {
         let ki = s.create_key(PublicKeyFormat::MlDsa65).unwrap();
         let data = b"foobar";
         let pk = s.get_key_info(&ki).unwrap();
-        let signature = s.sign(&ki, RpkiSignatureAlgorithm::mldsa65() , data).unwrap();
+        let signature = s.sign(&ki, RpkiSignatureAlgorithm::MlDsa65 , data).unwrap();
         pk.verify(b"foobar", &signature).unwrap();
         s.destroy_key(&ki).unwrap();
     }
@@ -412,6 +412,6 @@ pub mod pqc_tests {
     #[test]
     fn one_off() {
         let s = OQSSigner::new();
-        s.sign_one_off(RpkiSignatureAlgorithm::mldsa65(), b"foobar").unwrap();
+        s.sign_one_off(RpkiSignatureAlgorithm::MlDsa65, b"foobar").unwrap();
     }
 }
