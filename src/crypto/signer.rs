@@ -65,10 +65,13 @@ pub trait Signer {
 //------------ SigningAlgorithm ----------------------------------------------
 
 /// The algorithm to use for signing.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum SigningAlgorithm {
     /// RSA with PKCS#1 1.5 padding using SHA-256.
     RsaSha256,
+
+    /// ML-DSA-65 in 'pure mode'.
+    MlDsa65,
 
     /// ECDSA using the P-256 curva and SHA-256.
     EcdsaP256Sha256,
@@ -79,6 +82,7 @@ impl SigningAlgorithm {
     pub fn public_key_format(self) -> PublicKeyFormat {
         match self {
             SigningAlgorithm::RsaSha256 => PublicKeyFormat::Rsa,
+            SigningAlgorithm::MlDsa65 => PublicKeyFormat::MlDsa65,
             SigningAlgorithm::EcdsaP256Sha256 => PublicKeyFormat::EcdsaP256,
         }
     }

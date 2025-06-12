@@ -21,6 +21,12 @@ pub const SHA256: ConstOid
 pub const RSA_ENCRYPTION: ConstOid
     = Oid(&[42, 134, 72, 134, 247, 13, 1, 1, 1]);
 
+/// [draft-salter-lamps-cms-ml-dsa-00](https://www.ietf.org/archive/id/draft-salter-lamps-cms-ml-dsa-00.html) `id-ml-dsa-65`
+///
+/// Identifies an ML-DSA-65 public key.
+pub const MLDSA65: ConstOid
+    = Oid(&[96, 134, 72, 1, 101, 3, 4, 3, 18]);
+
 /// [RFC 4055](https://tools.ietf.org/html/rfc4055) `sha256WithRSAEncryption`
 ///
 /// Identifies the PKCS #1 version 1.5 signature algorithm with SHA-256.

@@ -264,3 +264,25 @@ impl<Alg> Signature<Alg> {
     }
 }
 
+pub fn verify_mldsa65(
+    public_key: untrusted::Input,
+    msg: untrusted::Input,
+    signature: untrusted::Input,
+) -> Result<(), ()> {
+    // This needs to happen once, but is safe to call multiple times
+    // as it internally uses `std::sync::Once`.
+    oqs::init();
+
+    let sigalg = oqs::sig::Sig::new(oqs::sig::Algorithm::MlDsa65).map_err(|_| ())?;
+    let pk = sigalg
+        .public_key_from_bytes(public_key.as_slice_less_safe())
+        .ok_or(())?;
+    let sig = sigalg
+        .signature_from_bytes(signature.as_slice_less_safe())
+        .ok_or(())?;
+
+    sigalg
+        .verify(msg.as_slice_less_safe(), sig, pk)
+        .map_err(|_| ())?;
+    Ok(())
+}

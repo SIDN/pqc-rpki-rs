@@ -16,7 +16,7 @@ use untrusted::Input;
 use crate::oid;
 #[cfg(feature = "serde")] use crate::util::base64;
 use crate::util::hex;
-use super::signature::{RpkiSignatureAlgorithm, Signature, SignatureAlgorithm};
+use super::signature::{RpkiSignatureAlgorithm, Signature, SignatureAlgorithm, verify_mldsa65};
 
 
 //------------ PublicKeyFormat -----------------------------------------------
@@ -34,8 +34,13 @@ use super::signature::{RpkiSignatureAlgorithm, Signature, SignatureAlgorithm};
 pub enum PublicKeyFormat {
     /// An RSA public key.
     ///
-    /// These keys must be used by all RPKI resource certificates.
+    /// These keys may be used by RPKI resource certificates.
     Rsa,
+
+    /// An ML-DSA-65 public key.
+    /// 
+    /// These keys may be used by RPKI resource certificates.
+    MlDsa65,
 
     /// An ECDSA public key for the P-256 elliptic curve.
     ///
@@ -50,7 +55,7 @@ impl PublicKeyFormat {
     /// repository itself, i.e., CA certificates and EE certificates for
     /// signed objects.
     pub fn allow_rpki_cert(self) -> bool {
-        matches!(self, PublicKeyFormat::Rsa)
+        matches!(self, PublicKeyFormat::Rsa | PublicKeyFormat::MlDsa65)
     }
 
     /// Returns whether the format is acceptable for router certificates.
@@ -117,15 +122,23 @@ impl PublicKeyFormat{
     pub fn encode(self) -> impl encode::Values {
         match self {
             PublicKeyFormat::Rsa => {
-                encode::Choice2::One(
+                encode::Choice3::One(
                     encode::sequence((
                         oid::RSA_ENCRYPTION.encode(),
                         ().encode(),
                     ))
                 )
             }
+            PublicKeyFormat::MlDsa65 => {
+                encode::Choice3::Two(
+                    encode::sequence((
+                        oid::MLDSA65.encode(),
+                        ().encode(),
+                    ))
+                )
+            }
             PublicKeyFormat::EcdsaP256 => {
-                encode::Choice2::Two(
+                encode::Choice3::Three(
                     encode::sequence((
                         oid::EC_PUBLIC_KEY.encode(),
                         oid::SECP256R1.encode(),
@@ -147,6 +160,11 @@ impl PublicKeyFormat{
                     bits, message, signature
                 ).map_err(Into::into)
             }
+            PublicKeyFormat::MlDsa65 => {
+                verify_mldsa65(
+                    bits, message, signature
+                ).map_err(|_| SignatureVerificationError(()))
+            }
             PublicKeyFormat::EcdsaP256 => {
                 signature::ECDSA_P256_SHA256_ASN1.verify(
                     bits, message, signature
@@ -157,8 +175,8 @@ impl PublicKeyFormat{
 }
 
 impl From<RpkiSignatureAlgorithm> for PublicKeyFormat {
-    fn from(_: RpkiSignatureAlgorithm) -> Self {
-        PublicKeyFormat::Rsa
+    fn from(alg: RpkiSignatureAlgorithm) -> Self {
+        alg.public_key_format()
     }
 }
 
@@ -230,6 +248,16 @@ impl PublicKey {
         })
     }
     
+    /// Creates an ML-DSA-65 public key from the key’s bits.
+    pub fn mldsa65_from_bytes(
+        bytes: Bytes
+    ) -> Self {
+        PublicKey {
+            algorithm: PublicKeyFormat::MlDsa65,
+            bits: BitString::new(0, bytes)
+        }
+    }
+
     /// Returns the algorithm of this public key.
     pub fn algorithm(&self) -> PublicKeyFormat {
         self.algorithm
