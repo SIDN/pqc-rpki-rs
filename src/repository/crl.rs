@@ -815,14 +815,13 @@ mod test {
 #[cfg(all(test, feature="softkeys"))]
 mod signer_test {
     use super::*;
-    use crate::crypto::PublicKeyFormat;
     use crate::crypto::softsigner::OpenSslSigner;
 
     #[test]
     fn build_ta_cert() {
         // CRL with two CrlEntries.
         let signer = OpenSslSigner::new();
-        let key = signer.create_key(PublicKeyFormat::Rsa).unwrap();
+        let key = signer.create_key().unwrap();
         let pubkey = signer.get_key_info(&key).unwrap();
         let crl = TbsCertList::new(
             Default::default(),

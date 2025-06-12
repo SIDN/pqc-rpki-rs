@@ -448,7 +448,7 @@ mod signer_test {
     use std::str::FromStr;
     use crate::uri;
     use crate::repository::cert::{KeyUsage, Overclaim, TbsCert};
-    use crate::crypto::{PublicKeyFormat, RpkiSignatureAlgorithm};
+    use crate::crypto::RpkiSignatureAlgorithm;
     use crate::crypto::softsigner::OpenSslSigner;
     use crate::repository::resources::Prefix;
     use crate::repository::tal::TalInfo;
@@ -461,7 +461,7 @@ mod signer_test {
     ) -> Aspa {
         let signer = OpenSslSigner::new();
 
-        let issuer_key = signer.create_key(PublicKeyFormat::Rsa).unwrap();
+        let issuer_key = signer.create_key().unwrap();
         let issuer_uri = uri::Rsync::from_str(
             "rsync://example.com/parent/ca.cer"
         ).unwrap();

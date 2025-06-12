@@ -572,8 +572,8 @@ mod test {
 #[cfg(all(test, feature = "softkeys"))]
 mod signer_test {
     use std::str::FromStr;
+    use crate::crypto::RpkiSignatureAlgorithm;
     use crate::repository::cert::{KeyUsage, Overclaim, TbsCert};
-    use crate::crypto::{PublicKeyFormat, RpkiSignatureAlgorithm};
     use crate::crypto::softsigner::OpenSslSigner;
     use crate::repository::resources::{Asn, Prefix};
     use crate::repository::tal::TalInfo;
@@ -582,7 +582,7 @@ mod signer_test {
 
     fn make_test_manifest() -> Manifest {
         let signer = OpenSslSigner::new();
-        let key = signer.create_key(PublicKeyFormat::Rsa).unwrap();
+        let key = signer.create_key().unwrap();
         let pubkey = signer.get_key_info(&key).unwrap();
         let uri = uri::Rsync::from_str("rsync://example.com/m/p").unwrap();
 

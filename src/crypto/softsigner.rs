@@ -112,9 +112,8 @@ impl Signer for OQSSigner {
 
     fn create_key(
         &self,
-        algorithm: PublicKeyFormat
     ) -> Result<Self::KeyId, Self::Error> {
-        Ok(self.insert_key(OQSKeyPair::new(algorithm)?))   
+        Ok(self.insert_key(OQSKeyPair::new(PublicKeyFormat::MlDsa65)?))   
     }
 
     fn get_key_info(
@@ -224,9 +223,9 @@ impl Signer for OpenSslSigner {
     type Error = io::Error;
 
     fn create_key(
-        &self, algorithm: PublicKeyFormat
+        &self,
     ) -> Result<Self::KeyId, Self::Error> {
-        Ok(self.insert_key(KeyPair::new(algorithm)?))
+        Ok(self.insert_key(KeyPair::new(PublicKeyFormat::Rsa)?))
     }
 
     fn get_key_info(
@@ -357,7 +356,7 @@ pub mod tests {
     #[test]
     fn info_sign_delete() {
         let s = OpenSslSigner::new();
-        let ki = s.create_key(PublicKeyFormat::Rsa).unwrap();
+        let ki = s.create_key().unwrap();
         let data = b"foobar";
         let _ = s.get_key_info(&ki).unwrap();
         let _ = s.sign(&ki, data).unwrap();
@@ -381,7 +380,7 @@ pub mod pqc_tests {
     #[test]
     fn create_sign_verify() {
         let s = OQSSigner::new();
-        let ki = s.create_key(PublicKeyFormat::MlDsa65).unwrap();
+        let ki = s.create_key().unwrap();
         let data = b"foobar";
         let pk = s.get_key_info(&ki).unwrap();
         let signature = s.sign(&ki, data).unwrap();

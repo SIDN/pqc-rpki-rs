@@ -1928,10 +1928,7 @@ mod signer_test {
 
     use crate::{
         ca::idcert::IdCert,
-        crypto::{
-            softsigner::{KeyId, OpenSslSigner},
-            PublicKeyFormat,
-        },
+        crypto::softsigner::{KeyId, OpenSslSigner},
     };
 
     fn sign_and_validate_msg(
@@ -1958,7 +1955,7 @@ mod signer_test {
     fn sign_and_validate() {
         let signer = OpenSslSigner::new();
 
-        let key = signer.create_key(PublicKeyFormat::Rsa).unwrap();
+        let key = signer.create_key().unwrap();
         let cert = IdCert::new_ta(
             Validity::from_secs(60), &key, &signer
         ).unwrap();

@@ -17,8 +17,7 @@ pub trait Signer {
 
     /// Creates a new key and returns an identifier.
     fn create_key(
-        &self,
-        algorithm: PublicKeyFormat
+        &self
     ) -> Result<Self::KeyId, Self::Error>;
 
     /// Returns the public key information for the given key.

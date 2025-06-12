@@ -737,14 +737,13 @@ pub mod tests {
 #[cfg(all(test, feature = "softkeys"))]
 mod signer_test {
     use crate::crypto::softsigner::OpenSslSigner;
-    use crate::crypto::PublicKeyFormat;
 
     use super::*;
 
     #[test]
     fn build_id_ta_cert() {
         let signer = OpenSslSigner::new();
-        let ta_key = signer.create_key(PublicKeyFormat::Rsa).unwrap();
+        let ta_key = signer.create_key().unwrap();
         let ta_cert = IdCert::new_ta(
             Validity::from_secs(60), &ta_key, &signer
         ).unwrap();

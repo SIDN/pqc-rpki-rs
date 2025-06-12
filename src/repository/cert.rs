@@ -2786,7 +2786,6 @@ mod test {
 #[cfg(all(test, feature="softkeys"))]
 mod signer_test {
     use std::str::FromStr;
-    use crate::crypto::PublicKeyFormat;
     use crate::crypto::softsigner::OpenSslSigner;
     use crate::repository::resources::{Asn, Prefix};
     use super::*;
@@ -2795,7 +2794,7 @@ mod signer_test {
     #[test]
     fn build_ta_cert() {
         let signer = OpenSslSigner::new();
-        let key = signer.create_key(PublicKeyFormat::Rsa).unwrap();
+        let key = signer.create_key().unwrap();
         let pubkey = signer.get_key_info(&key).unwrap();
         let uri = uri::Rsync::from_str("rsync://example.com/m/p").unwrap();
         let mut cert = TbsCert::new(

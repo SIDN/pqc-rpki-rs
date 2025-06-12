@@ -575,10 +575,9 @@ mod test {
     fn build_csr() {
 
         use crate::crypto::softsigner::OpenSslSigner;
-        use crate::crypto::PublicKeyFormat;
 
         let signer = OpenSslSigner::new();
-        let key = signer.create_key(PublicKeyFormat::Rsa).unwrap();
+        let key = signer.create_key().unwrap();
 
 
         let ca_repo = rsync("rsync://localhost/repo/");
@@ -629,7 +628,6 @@ mod signer_test {
 
     #[test]
     fn router_cert_from_csr() {
-        use crate::crypto::keys::PublicKeyFormat;
         use crate::crypto::softsigner::OpenSslSigner;
         use crate::repository::cert::{Cert, Overclaim};
         use crate::repository::resources::{Asn, Prefix};
@@ -641,7 +639,7 @@ mod signer_test {
         csr.verify_signature().unwrap();
 
         let signer = OpenSslSigner::new();
-        let ca_key = signer.create_key(PublicKeyFormat::Rsa).unwrap();
+        let ca_key = signer.create_key().unwrap();
         let ca_pubkey = signer.get_key_info(&ca_key).unwrap();
         let uri = uri::Rsync::from_str("rsync://example.com/m/p").unwrap();
         let mut cert = TbsCert::new(
